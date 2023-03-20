@@ -1,35 +1,33 @@
+# Download a debian image
 FROM debian:bullseye-slim
 
-RUN apt-get update && \
-  apt-get install -y perl cpanminus wget rsync \
-  nodejs npm libssl-dev liblwp-protocol-https-perl nginx && \
-  rm -rf /var/lib/apt/lists/*
-
-RUN npm install -g dotenv
-RUN dotenv -e .env
-
+# Set work directory
 WORKDIR /app
 
+# Copy modules.txt from host machine
 COPY modules.txt .
 
+# Create the mirror folder for the modules to be stored in
+RUN mkdir mirror
+
+# Download all necessary packages
+RUN apt-get update && \
+  apt-get install -y perl cpanminus wget rsync \ 
+  libssl-dev liblwp-protocol-https-perl nginx nano
+
+# Remove unnecessary files
+RUN  rm -rf /var/lib/apt/lists/* && \
+  rm /etc/nginx/sites-enabled/default 
+
+# Initialize CPANM
+RUN cpan App::cpanminus
+
+# Install App::cpanminus and modules from modulex.txt
 RUN cpanm --notest --save-dists /app/mirror --installdeps App::cpanminus && \
-  cpanm --notest --save-dists /app/mirror --installdeps < ~/modules.txt
+  cpanm --notest --save-dists /app/mirror --installdeps < modules.txt
 
-# Remove default Nginx configuration
-RUN rm /etc/nginx/sites-enabled/default
-
-# Create a new Nginx configuration file to serve the mirror directory
-RUN echo "server {" \
-  "listen 80;" \
-  "root /app/mirror;" \
-  "index index.html;" \
-  "location / {" \
-  "try_files \$uri \$uri/ =404;" \
-  "}" \
-  "}" > /etc/nginx/sites-available/cpan_mirror
-
-# Enable the new Nginx configuration
-RUN ln -s /etc/nginx/sites-available/cpan_mirror /etc/nginx/sites-enabled/cpan_mirror
+# Copy NGINX config file to container
+COPY nginx.conf /etc/nginx/conf.d/nginx.conf
 
 # Expose port 80
 EXPOSE 80
